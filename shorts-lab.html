@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shorts Lab — Performance Analyzer</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+  :root{
+    --bg: #0e1117;
+    --panel: #161a23;
+    --panel-2: #1d2230;
+    --line: #2a2f3d;
+    --text: #e8eaf0;
+    --dim: #8891a3;
+    --accent: #6ee7c7;   /* signal green */
+    --accent-dim: #3a4a45;
+    --warn: #ff8a5c;
+    --bad: #ff6b6b;
+    --good: #6ee7c7;
+    --mono: 'JetBrains Mono', monospace;
+    --disp: 'Space Grotesk', sans-serif;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; background:var(--bg); color:var(--text); font-family:var(--disp); }
+
+  .wrap{ max-width:1400px; margin:0 auto; padding:28px 20px 80px; }
+
+  header{ display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:22px; border-bottom:1px solid var(--line); padding-bottom:18px;}
+  .brand{ display:flex; align-items:center; gap:10px; }
+  .brand-mark{ width:10px; height:24px; background:linear-gradient(180deg, var(--accent), var(--accent-dim)); border-radius:2px; }
+  h1{ font-size:22px; margin:0; letter-spacing:-0.02em; font-weight:700; }
+  .tag{ color:var(--dim); font-family:var(--mono); font-size:12px; }
+
+  .panel{ background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:18px 20px; margin-bottom:16px; }
+  .panel h2{ font-size:13px; text-transform:uppercase; letter-spacing:0.08em; color:var(--dim); margin:0 0 12px; font-weight:600; }
+
+  .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  input[type=text]{
+    background:var(--panel-2); border:1px solid var(--line); color:var(--text);
+    padding:10px 12px; border-radius:7px; font-family:var(--mono); font-size:13px; flex:1; min-width:220px;
+  }
+  input[type=text]:focus{ outline:none; border-color:var(--accent); }
+
+  button{
+    background:var(--panel-2); color:var(--text); border:1px solid var(--line);
+    padding:10px 16px; border-radius:7px; font-family:var(--disp); font-weight:600; font-size:13px;
+    cursor:pointer; transition:border-color .15s, transform .05s;
+  }
+  button:hover{ border-color:var(--accent); }
+  button:active{ transform:scale(0.98); }
+  button.primary{ background:var(--accent); color:#0e1117; border-color:var(--accent); }
+  button.primary:hover{ opacity:0.9; }
+  button:disabled{ opacity:0.4; cursor:not-allowed; }
+  button.ghost{ background:transparent; }
+
+  details summary{ cursor:pointer; color:var(--dim); font-size:13px; margin-bottom:6px; }
+  .steps{ font-size:13px; line-height:1.7; color:var(--dim); margin-top:10px; }
+  .steps code{ background:var(--panel-2); padding:1px 6px; border-radius:4px; color:var(--accent); font-family:var(--mono); }
+  .steps a{ color:var(--accent); }
+
+  .status{ font-family:var(--mono); font-size:12px; color:var(--dim); margin-top:10px; min-height:16px; }
+  .status.err{ color:var(--bad); }
+  .status.ok{ color:var(--accent); }
+
+  .toolbar{ display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px; }
+  .count{ font-family:var(--mono); font-size:12px; color:var(--dim); }
+  input[type=file]{ display:none; }
+
+  .table-scroll{ overflow-x:auto; border:1px solid var(--line); border-radius:10px; background:var(--panel); }
+  table{ border-collapse:collapse; width:100%; font-size:12.5px; }
+  th{
+    position:sticky; top:0; background:var(--panel-2); text-align:left; padding:10px 12px;
+    font-family:var(--mono); font-weight:600; color:var(--dim); text-transform:uppercase; font-size:10.5px;
+    letter-spacing:0.05em; cursor:pointer; white-space:nowrap; border-bottom:1px solid var(--line);
+  }
+  th:hover{ color:var(--accent); }
+  th.sorted{ color:var(--accent); }
+  td{ padding:9px 12px; border-bottom:1px solid var(--line); font-family:var(--mono); white-space:nowrap; }
+  tr:hover td{ background:rgba(255,255,255,0.02); }
+  td.title-cell{ font-family:var(--disp); white-space:normal; min-width:220px; max-width:320px; font-size:12.5px; }
+  td.editable{ cursor:text; }
+  td.editable:focus{ outline:1px solid var(--accent); background:rgba(110,231,199,0.06); }
+  .heat{ border-radius:4px; padding:2px 7px; display:inline-block; min-width:52px; text-align:right; }
+  .desc-cell{ max-width:260px; white-space:normal; color:var(--dim); font-size:11.5px; }
+  .empty{ padding:60px 20px; text-align:center; color:var(--dim); }
+  .empty b{ color:var(--text); }
+
+  .legend{ display:flex; gap:16px; align-items:center; font-family:var(--mono); font-size:11px; color:var(--dim); margin-top:10px; }
+  .swatch{ width:12px; height:12px; border-radius:3px; display:inline-block; margin-right:5px; vertical-align:-2px; }
+
+  footer{ text-align:center; color:var(--dim); font-size:11px; font-family:var(--mono); margin-top:30px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <div>
+        <h1>Shorts Lab</h1>
+        <div class="tag">per-video performance, min&#8594;max</div>
+      </div>
+    </div>
+    <div class="tag">runs entirely in your browser · no data leaves your device</div>
+  </header>
+
+  <div class="panel" id="setupPanel">
+    <h2>Connect your channel</h2>
+    <details id="setupDetails">
+      <summary>One-time setup — click for instructions (~10 min)</summary>
+      <div class="steps">
+        1. Go to <a href="https://console.cloud.google.com/projectcreate" target="_blank">console.cloud.google.com</a> and create a free project.<br>
+        2. Go to <b>APIs &amp; Services → Library</b>, enable <code>YouTube Data API v3</code> and <code>YouTube Analytics API</code>.<br>
+        3. Go to <b>APIs &amp; Services → OAuth consent screen</b>. Choose <b>External</b>, fill in the basics, add your own email as a test user.<br>
+        4. Go to <b>APIs &amp; Services → Credentials → Create Credentials → OAuth Client ID</b>. Choose <b>Web application</b>.<br>
+        5. Under <b>Authorized JavaScript origins</b>, add the origin shown in your browser's address bar right now for this page.<br>
+        6. Copy the <b>Client ID</b> (ends in <code>.apps.googleusercontent.com</code>) and paste it below. It's not a secret — safe to store.
+      </div>
+    </details>
+    <div class="row" style="margin-top:14px;">
+      <input type="text" id="clientId" placeholder="Paste your OAuth Client ID here (e.g. 123...apps.googleusercontent.com)">
+      <button class="primary" id="connectBtn" disabled>Connect to YouTube</button>
+    </div>
+    <div class="status" id="authStatus"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Data</h2>
+    <div class="row">
+      <button class="primary" id="fetchBtn" disabled>Fetch all my videos</button>
+      <button id="importBtn">Import a CSV</button>
+      <input type="file" id="csvFile" accept=".csv">
+      <button id="exportBtn" disabled>Export CSV</button>
+      <button class="ghost" id="clearBtn" disabled>Clear table</button>
+    </div>
+    <div class="status" id="fetchStatus"></div>
+  </div>
+
+  <div class="toolbar">
+    <div class="count" id="rowCount">no data loaded</div>
+    <div class="count">click a column header to sort · click any cell to edit it</div>
+  </div>
+
+  <div class="table-scroll">
+    <table id="dataTable" style="display:none;">
+      <thead>
+        <tr id="headRow"></tr>
+      </thead>
+      <tbody id="bodyRows"></tbody>
+    </table>
+    <div class="empty" id="emptyState">
+      <b>No videos loaded yet.</b><br>
+      Connect your channel and fetch your data, or import a CSV you exported earlier.
+    </div>
+  </div>
+
+  <div class="legend" id="legend" style="display:none;">
+    <span><span class="swatch" style="background:#3a1f1f;"></span>relatively weak (this column)</span>
+    <span><span class="swatch" style="background:#3a3a24;"></span>middle</span>
+    <span><span class="swatch" style="background:#1f3a30;"></span>relatively strong (this column)</span>
+    <span style="margin-left:auto;">heat is relative to your own videos — not an industry benchmark</span>
+  </div>
+
+  <footer>Shorts Lab — a single HTML file, your data never touches a server</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script>
+(function(){
+  const COLUMNS = [
+    {key:'title', label:'Title', type:'text', editable:true, heat:false, width:'title-cell'},
+    {key:'publishedAt', label:'Published', type:'text', editable:false, heat:false},
+    {key:'views', label:'Views', type:'number', editable:true, heat:true},
+    {key:'retentionPct', label:'Retention %', type:'number', editable:true, heat:true},
+    {key:'avgViewDurationSec', label:'Avg View (s)', type:'number', editable:true, heat:true},
+    {key:'likeRate', label:'Like Rate %', type:'number', editable:true, heat:true},
+    {key:'commentRate', label:'Comment Rate %', type:'number', editable:true, heat:true},
+    {key:'subRate', label:'Sub Rate %', type:'number', editable:true, heat:true},
+    {key:'scrollRate', label:'Scroll/Swipe-away %', type:'number', editable:true, heat:true, manual:true},
+    {key:'shares', label:'Shares', type:'number', editable:true, heat:true},
+    {key:'description', label:'Description', type:'text', editable:true, heat:false, width:'desc-cell'},
+    {key:'videoId', label:'Video ID', type:'text', editable:false, heat:false},
+  ];
+
+  let rows = [];
+  let sortState = {key:null, dir:1};
+  let accessToken = null;
+
+  const $ = (id) => document.getElementById(id);
+  const clientIdInput = $('clientId');
+  const connectBtn = $('connectBtn');
+  const fetchBtn = $('fetchBtn');
+  const exportBtn = $('exportBtn');
+  const clearBtn = $('clearBtn');
+  const importBtn = $('importBtn');
+  const csvFile = $('csvFile');
+  const authStatus = $('authStatus');
+  const fetchStatus = $('fetchStatus');
+  const table = $('dataTable');
+  const emptyState = $('emptyState');
+  const rowCount = $('rowCount');
+  const legend = $('legend');
+
+  clientIdInput.addEventListener('input', () => {
+    connectBtn.disabled = clientIdInput.value.trim().length < 20;
+  });
+
+  let tokenClient = null;
+
+  connectBtn.addEventListener('click', () => {
+    const clientId = clientIdInput.value.trim();
+    if (!clientId) return;
+    setAuthStatus('Opening Google sign-in…', false);
+    try {
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: 'https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly',
+        callback: (resp) => {
+          if (resp.error) {
+            setAuthStatus('Sign-in failed: ' + resp.error, true);
+            return;
+          }
+          accessToken = resp.access_token;
+          setAuthStatus('Connected. Ready to fetch your data.', false, true);
+          fetchBtn.disabled = false;
+        },
+      });
+      tokenClient.requestAccessToken();
+    } catch (e) {
+      setAuthStatus('Could not start sign-in — check your Client ID and that this page\'s origin is registered. ' + e.message, true);
+    }
+  });
+
+  function setAuthStatus(msg, isErr, isOk){
+    authStatus.textContent = msg;
+    authStatus.className = 'status' + (isErr ? ' err' : isOk ? ' ok' : '');
+  }
+  function setFetchStatus(msg, isErr, isOk){
+    fetchStatus.textContent = msg;
+    fetchStatus.className = 'status' + (isErr ? ' err' : isOk ? ' ok' : '');
+  }
+
+  async function ytFetch(url){
+    const res = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`${res.status} ${res.statusText} — ${body.slice(0,200)}`);
+    }
+    return res.json();
+  }
+
+  fetchBtn.addEventListener('click', async () => {
+    fetchBtn.disabled = true;
+    try {
+      setFetchStatus('Finding your uploads…', false);
+      const chData = await ytFetch('https://www.googleapis.com/youtube/v3/channels?part=contentDetails&mine=true');
+      const uploadsId = chData.items[0].contentDetails.relatedPlaylists.uploads;
+
+      // 1) Enumerate all video IDs (paginated, cheap)
+      let videoIds = [];
+      let pageToken = '';
+      do {
+        const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=contentDetails&maxResults=50&playlistId=${uploadsId}${pageToken ? '&pageToken=' + pageToken : ''}`;
+        const pl = await ytFetch(url);
+        videoIds.push(...pl.items.map(i => i.contentDetails.videoId));
+        pageToken = pl.nextPageToken || '';
+        setFetchStatus(`Found ${videoIds.length} videos so far…`, false);
+      } while (pageToken);
+
+      if (videoIds.length === 0) {
+        setFetchStatus('No videos found on this channel.', true);
+        fetchBtn.disabled = false;
+        return;
+      }
+
+      // 2) Batch public stats/snippet, 50 IDs per call
+      const publicById = {};
+      for (let i = 0; i < videoIds.length; i += 50) {
+        const batch = videoIds.slice(i, i + 50);
+        setFetchStatus(`Fetching video details ${i+1}–${Math.min(i+50, videoIds.length)} of ${videoIds.length}…`, false);
+        const vd = await ytFetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails&id=${batch.join(',')}`);
+        vd.items.forEach(v => { publicById[v.id] = v; });
+      }
+
+      // 3) One Analytics API call for the whole channel, dimensions=video, paginated if needed
+      setFetchStatus('Fetching retention, watch time, and subscriber data (one query for your whole channel)…', false);
+      const analyticsById = {};
+      let startIndex = 1;
+      const maxResults = 200;
+      while (true) {
+        const aUrl = `https://youtubeanalytics.googleapis.com/v2/reports?ids=channel==MINE&startDate=2005-01-01&endDate=${new Date().toISOString().slice(0,10)}&metrics=views,likes,comments,shares,subscribersGained,averageViewDuration,averageViewPercentage&dimensions=video&sort=-views&maxResults=${maxResults}&startIndex=${startIndex}`;
+        const a = await ytFetch(aUrl);
+        (a.rows || []).forEach(r => {
+          const [videoId, views, likes, comments, shares, subsGained, avgDur, avgPct] = r;
+          analyticsById[videoId] = { views, likes, comments, shares, subsGained, avgDur, avgPct };
+        });
+        if (!a.rows || a.rows.length < maxResults) break;
+        startIndex += maxResults;
+      }
+
+      // 4) Merge
+      rows = videoIds.map(id => {
+        const pub = publicById[id];
+        const an = analyticsById[id] || {};
+        const views = an.views ?? pub?.statistics?.viewCount ?? 0;
+        const likes = an.likes ?? pub?.statistics?.likeCount ?? 0;
+        const comments = an.comments ?? pub?.statistics?.commentCount ?? 0;
+        const subsGained = an.subsGained ?? 0;
+        const shares = an.shares ?? '';
+        return {
+          videoId: id,
+          title: pub?.snippet?.title || '(unknown)',
+          description: (pub?.snippet?.description || '').slice(0, 300),
+          publishedAt: pub?.snippet?.publishedAt ? pub.snippet.publishedAt.slice(0,10) : '',
+          views: Number(views) || 0,
+          retentionPct: an.avgPct !== undefined ? round1(an.avgPct) : '',
+          avgViewDurationSec: an.avgDur !== undefined ? round1(an.avgDur) : '',
+          likeRate: views ? round2((Number(likes)||0) / views * 100) : '',
+          commentRate: views ? round2((Number(comments)||0) / views * 100) : '',
+          subRate: views ? round2((Number(subsGained)||0) / views * 100) : '',
+          scrollRate: '',
+          shares: shares,
+        };
+      });
+
+      renderTable();
+      setFetchStatus(`Done. Loaded ${rows.length} videos. Scroll rate isn't available via API — fill it in manually if you want it (find it in YouTube Studio → Content → Shorts).`, false, true);
+      exportBtn.disabled = false;
+      clearBtn.disabled = false;
+    } catch (e) {
+      setFetchStatus('Something went wrong: ' + e.message, true);
+    }
+    fetchBtn.disabled = false;
+  });
+
+  function round1(n){ return Math.round(n*10)/10; }
+  function round2(n){ return Math.round(n*100)/100; }
+
+  importBtn.addEventListener('click', () => csvFile.click());
+  csvFile.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (res) => {
+        rows = res.data.map(r => {
+          const out = {};
+          COLUMNS.forEach(c => {
+            let v = r[c.label] !== undefined ? r[c.label] : (r[c.key] !== undefined ? r[c.key] : '');
+            out[c.key] = c.type === 'number' && v !== '' ? Number(v) : v;
+          });
+          return out;
+        });
+        renderTable();
+        setFetchStatus(`Imported ${rows.length} rows from ${file.name}.`, false, true);
+        exportBtn.disabled = false;
+        clearBtn.disabled = false;
+      },
+      error: (err) => setFetchStatus('CSV import failed: ' + err.message, true),
+    });
+  });
+
+  clearBtn.addEventListener('click', () => {
+    rows = [];
+    renderTable();
+    exportBtn.disabled = true;
+    clearBtn.disabled = true;
+    setFetchStatus('Table cleared.', false);
+  });
+
+  exportBtn.addEventListener('click', () => {
+    const data = rows.map(r => {
+      const out = {};
+      COLUMNS.forEach(c => { out[c.label] = r[c.key]; });
+      return out;
+    });
+    const csv = Papa.unparse(data);
+    const blob = new Blob([csv], {type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `shorts-lab-export-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  function heatColor(value, colVals){
+    const nums = colVals.filter(v => typeof v === 'number' && !isNaN(v));
+    if (nums.length < 2 || typeof value !== 'number' || isNaN(value)) return null;
+    const min = Math.min(...nums), max = Math.max(...nums);
+    if (max === min) return null;
+    const t = (value - min) / (max - min); // 0..1
+    // interpolate red -> yellow -> green
+    let r,g,b;
+    if (t < 0.5){
+      const t2 = t/0.5;
+      r = lerp(0x3a,0x3a,t2); g = lerp(0x1f,0x3a,t2); b = lerp(0x1f,0x24,t2);
+    } else {
+      const t2 = (t-0.5)/0.5;
+      r = lerp(0x3a,0x1f,t2); g = lerp(0x3a,0x3a,t2); b = lerp(0x24,0x30,t2);
+    }
+    return `rgb(${r},${g},${b})`;
+  }
+  function lerp(a,b,t){ return Math.round(a + (b-a)*t); }
+
+  function renderTable(){
+    const headRow = $('headRow');
+    const bodyRows = $('bodyRows');
+    headRow.innerHTML = '';
+    bodyRows.innerHTML = '';
+
+    if (rows.length === 0){
+      table.style.display = 'none';
+      emptyState.style.display = 'block';
+      legend.style.display = 'none';
+      rowCount.textContent = 'no data loaded';
+      return;
+    }
+    table.style.display = 'table';
+    emptyState.style.display = 'none';
+    legend.style.display = 'flex';
+    rowCount.textContent = `${rows.length} videos`;
+
+    if (sortState.key){
+      rows.sort((a,b) => {
+        let av = a[sortState.key], bv = b[sortState.key];
+        if (typeof av === 'number' || typeof bv === 'number'){
+          av = Number(av) || -Infinity; bv = Number(bv) || -Infinity;
+        }
+        if (av < bv) return -1*sortState.dir;
+        if (av > bv) return 1*sortState.dir;
+        return 0;
+      });
+    }
+
+    COLUMNS.forEach(c => {
+      const th = document.createElement('th');
+      th.textContent = c.label + (sortState.key === c.key ? (sortState.dir === 1 ? ' ↑' : ' ↓') : '');
+      if (sortState.key === c.key) th.classList.add('sorted');
+      th.addEventListener('click', () => {
+        if (sortState.key === c.key) sortState.dir *= -1;
+        else { sortState.key = c.key; sortState.dir = -1; }
+        renderTable();
+      });
+      headRow.appendChild(th);
+    });
+
+    // precompute column values for heat mapping
+    const colValues = {};
+    COLUMNS.forEach(c => { if (c.heat) colValues[c.key] = rows.map(r => typeof r[c.key]==='number' ? r[c.key] : Number(r[c.key])); });
+
+    rows.forEach((r, rowIdx) => {
+      const tr = document.createElement('tr');
+      COLUMNS.forEach(c => {
+        const td = document.createElement('td');
+        if (c.width) td.classList.add(c.width);
+        const val = r[c.key];
+        if (c.heat){
+          const color = heatColor(typeof val === 'number' ? val : Number(val), colValues[c.key]);
+          const span = document.createElement('span');
+          span.className = 'heat';
+          span.textContent = (val === '' || val === undefined || val === null) ? '—' : val;
+          if (color) span.style.background = color;
+          td.appendChild(span);
+        } else {
+          td.textContent = (val === undefined || val === null) ? '' : val;
+        }
+        if (c.editable){
+          td.classList.add('editable');
+          td.contentEditable = 'true';
+          td.addEventListener('blur', () => {
+            let newVal = td.textContent.trim();
+            if (c.heat) {
+              // strip the span text if user edited directly
+              newVal = td.textContent.trim();
+            }
+            if (c.type === 'number'){
+              const n = parseFloat(newVal.replace('—',''));
+              rows[rowIdx][c.key] = isNaN(n) ? '' : n;
+            } else {
+              rows[rowIdx][c.key] = newVal;
+            }
+          });
+        }
+        tr.appendChild(td);
+      });
+      bodyRows.appendChild(tr);
+    });
+  }
+
+  renderTable();
+})();
+</script>
+</body>
+</html>
