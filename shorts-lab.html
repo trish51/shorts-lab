@@ -81,8 +81,14 @@
   td{ padding:9px 12px; border-bottom:1px solid var(--line); font-family:var(--mono); white-space:nowrap; }
   tr:hover td{ background:rgba(255,255,255,0.02); }
   td.title-cell{ font-family:var(--disp); white-space:normal; min-width:220px; max-width:320px; font-size:12.5px; }
-  td.editable{ cursor:text; }
-  td.editable:focus{ outline:1px solid var(--accent); background:rgba(110,231,199,0.06); }
+  td.editable{ padding:5px 8px; }
+  .cell-input{
+    width:100%; background:transparent; border:1px solid transparent; color:var(--text);
+    font-family:var(--mono); font-size:12.5px; padding:4px 6px; border-radius:4px;
+  }
+  .title-cell .cell-input{ font-family:var(--disp); }
+  .cell-input:focus{ outline:none; border-color:var(--accent); background:rgba(110,231,199,0.06); }
+  .cell-input.heat-input{ text-align:right; font-weight:600; min-width:70px; }
   .heat{ border-radius:4px; padding:2px 7px; display:inline-block; min-width:52px; text-align:right; }
   .desc-cell{ max-width:260px; white-space:normal; color:var(--dim); font-size:11.5px; }
   .empty{ padding:60px 20px; text-align:center; color:var(--dim); }
@@ -282,8 +288,17 @@
       for (let i = 0; i < videoIds.length; i += 50) {
         const batch = videoIds.slice(i, i + 50);
         setFetchStatus(`Fetching video details ${i+1}–${Math.min(i+50, videoIds.length)} of ${videoIds.length}…`, false);
-        const vd = await ytFetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails&id=${batch.join(',')}`);
+        const vd = await ytFetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails,status&id=${batch.join(',')}`);
         vd.items.forEach(v => { publicById[v.id] = v; });
+      }
+
+      // Filter out anything that isn't a live, public video (drops scheduled/private/unlisted)
+      const skipped = videoIds.filter(id => publicById[id]?.status?.privacyStatus !== 'public');
+      videoIds = videoIds.filter(id => publicById[id]?.status?.privacyStatus === 'public');
+      if (videoIds.length === 0) {
+        setFetchStatus('No public videos found (everything found was private, unlisted, or scheduled).', true);
+        fetchBtn.disabled = false;
+        return;
       }
 
       // 3) One Analytics API call for the whole channel, dimensions=video, paginated if needed
@@ -328,7 +343,8 @@
       });
 
       renderTable();
-      setFetchStatus(`Done. Loaded ${rows.length} videos. Scroll rate isn't available via API — fill it in manually if you want it (find it in YouTube Studio → Content → Shorts).`, false, true);
+      const skipMsg = skipped.length ? ` Skipped ${skipped.length} non-public video(s) (scheduled/private/unlisted).` : '';
+      setFetchStatus(`Done. Loaded ${rows.length} public videos.${skipMsg} Scroll rate isn't available via API — fill it in manually if you want it (find it in YouTube Studio → Content → Shorts).`, false, true);
       exportBtn.disabled = false;
       clearBtn.disabled = false;
     } catch (e) {
@@ -460,7 +476,30 @@
         const td = document.createElement('td');
         if (c.width) td.classList.add(c.width);
         const val = r[c.key];
-        if (c.heat){
+
+        if (c.editable){
+          td.classList.add('editable');
+          const input = document.createElement('input');
+          input.type = c.type === 'number' ? 'text' : 'text'; // text even for numbers, avoids spinner/scroll quirks
+          input.inputMode = c.type === 'number' ? 'decimal' : 'text';
+          input.className = 'cell-input' + (c.heat ? ' heat-input' : '');
+          input.value = (val === undefined || val === null) ? '' : val;
+          if (c.heat){
+            const color = heatColor(typeof val === 'number' ? val : Number(val), colValues[c.key]);
+            if (color) input.style.background = color;
+          }
+          input.addEventListener('change', () => {
+            let newVal = input.value.trim();
+            if (c.type === 'number'){
+              const n = parseFloat(newVal);
+              rows[rowIdx][c.key] = isNaN(n) ? '' : n;
+            } else {
+              rows[rowIdx][c.key] = newVal;
+            }
+            renderTable();
+          });
+          td.appendChild(input);
+        } else if (c.heat){
           const color = heatColor(typeof val === 'number' ? val : Number(val), colValues[c.key]);
           const span = document.createElement('span');
           span.className = 'heat';
@@ -469,23 +508,6 @@
           td.appendChild(span);
         } else {
           td.textContent = (val === undefined || val === null) ? '' : val;
-        }
-        if (c.editable){
-          td.classList.add('editable');
-          td.contentEditable = 'true';
-          td.addEventListener('blur', () => {
-            let newVal = td.textContent.trim();
-            if (c.heat) {
-              // strip the span text if user edited directly
-              newVal = td.textContent.trim();
-            }
-            if (c.type === 'number'){
-              const n = parseFloat(newVal.replace('—',''));
-              rows[rowIdx][c.key] = isNaN(n) ? '' : n;
-            } else {
-              rows[rowIdx][c.key] = newVal;
-            }
-          });
         }
         tr.appendChild(td);
       });
